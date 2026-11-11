@@ -3,45 +3,130 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QuestFit — почта подтверждена</title>
+<title>QuestFit</title>
 <style>
-  :root { --bg: #ffffff; --fg: #1d211e; --muted: #5d675f; --accent: #2e7d4f; }
+  :root { --bg: #ffffff; --fg: #1d211e; --muted: #5d675f; --accent: #2e7d4f; --line: #cfd8d2; --error: #c0392b; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #111512; --fg: #e2e7e3; --muted: #9ba79f; --accent: #8fd3a8; }
+    :root { --bg: #111512; --fg: #e2e7e3; --muted: #9ba79f; --accent: #8fd3a8; --line: #2f3a33; --error: #ff8a7a; }
   }
   body { background: var(--bg); color: var(--fg); margin: 0;
          font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 560px; margin: 0 auto; padding: 64px 16px; text-align: center; }
+  main { max-width: 480px; margin: 0 auto; padding: 56px 16px; text-align: center; }
   .mark { width: 72px; height: 72px; border-radius: 50%; background: var(--accent);
           color: var(--bg); font-size: 40px; line-height: 72px; margin: 0 auto 24px; }
   h1 { font-size: 26px; margin: 0 0 12px; }
   p { margin: 8px 0; }
   .muted { color: var(--muted); }
-  .error { display: none; }
+  section { display: none; }
+  form { text-align: left; margin-top: 20px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  input { width: 100%; box-sizing: border-box; font: inherit; padding: 12px; border-radius: 10px;
+          border: 1px solid var(--line); background: transparent; color: var(--fg); }
+  button { width: 100%; margin-top: 20px; padding: 14px; font: inherit; font-weight: 600;
+           border: 0; border-radius: 999px; background: var(--accent); color: var(--bg); cursor: pointer; }
+  button:disabled { opacity: .6; }
+  .error { color: var(--error); min-height: 1.6em; margin-top: 12px; }
 </style>
 </head>
 <body>
 <main>
-  <div id="ok">
+  <section id="confirmed">
     <div class="mark">✓</div>
     <h1>Почта подтверждена</h1>
-    <p>Вернитесь в QuestFit и войдите с этой почтой и паролем.</p>
+    <p>Вернись в QuestFit и войди с этой почтой и паролем.</p>
     <p class="muted">Email confirmed. Go back to QuestFit and sign in.</p>
-  </div>
-  <div id="error" class="error">
+  </section>
+
+  <section id="reset">
+    <h1>Новый пароль</h1>
+    <p class="muted">New password for QuestFit</p>
+    <form id="form">
+      <label for="p1">Новый пароль, не короче 8 символов</label>
+      <input id="p1" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="p2">Ещё раз</label>
+      <input id="p2" type="password" autocomplete="new-password" minlength="8" required>
+      <button id="save" type="submit">Сохранить</button>
+      <div id="formError" class="error"></div>
+    </form>
+  </section>
+
+  <section id="saved">
+    <div class="mark">✓</div>
+    <h1>Пароль изменён</h1>
+    <p>Вернись в QuestFit и войди с новым паролем.</p>
+    <p class="muted">Password changed. Go back to QuestFit and sign in with it.</p>
+  </section>
+
+  <section id="bad">
     <h1>Ссылка не сработала</h1>
-    <p>Возможно, она устарела или уже была использована. Попробуйте войти в QuestFit — если почта не подтверждена, приложение предложит отправить письмо ещё раз.</p>
-    <p class="muted">The link did not work: it may have expired or been used already. Try signing in to QuestFit.</p>
-  </div>
+    <p>Возможно, она устарела или уже была использована. Запроси письмо ещё раз в QuestFit.</p>
+    <p class="muted">The link did not work: it may have expired or been used already. Ask for a new letter in QuestFit.</p>
+  </section>
 </main>
 <script>
-  // Supabase adds error details after # when the link is bad. The tokens it
-  // adds on success are not read or kept here.
-  if (location.hash.includes('error')) {
-    document.getElementById('ok').style.display = 'none';
-    document.getElementById('error').style.display = 'block';
-  }
+  // The public project address and key, as in the app. They allow nothing
+  // without the user's own token from the link.
+  const SUPABASE = 'https://qqajbnxzskbejbbqlucq.supabase.co';
+  const KEY = 'sb_publishable_ttYE4UxsKmklPN6hkExZag_BJSXF0Pb';
+
+  const hash = new URLSearchParams(location.hash.slice(1));
+  // The tokens are kept only in this page's memory, and taken out of the
+  // address bar at once.
   history.replaceState(null, '', location.pathname);
+
+  function show(id) {
+    for (const s of document.querySelectorAll('section')) s.style.display = 'none';
+    document.getElementById(id).style.display = 'block';
+  }
+
+  const token = hash.get('access_token');
+  if (hash.get('error') || hash.get('error_code')) {
+    show('bad');
+  } else if (hash.get('type') === 'recovery' && token) {
+    show('reset');
+  } else {
+    show('confirmed');
+  }
+
+  document.getElementById('form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = document.getElementById('formError');
+    const p1 = document.getElementById('p1').value;
+    const p2 = document.getElementById('p2').value;
+    error.textContent = '';
+    if (p1.length < 8) { error.textContent = 'Пароль короче 8 символов.'; return; }
+    if (p1 !== p2) { error.textContent = 'Пароли не совпадают.'; return; }
+    const button = document.getElementById('save');
+    button.disabled = true;
+    try {
+      const response = await fetch(SUPABASE + '/auth/v1/user', {
+        method: 'PUT',
+        headers: {
+          'apikey': KEY,
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password: p1 }),
+      });
+      if (response.ok) {
+        show('saved');
+        return;
+      }
+      const body = await response.json().catch(() => ({}));
+      if (response.status === 401 || response.status === 403) {
+        show('bad');
+        return;
+      }
+      error.textContent = body.code === 'same_password'
+        ? 'Этот пароль уже стоит. Придумай другой.'
+        : (body.code === 'weak_password'
+          ? 'Слишком простой пароль. Придумай сложнее.'
+          : 'Не получилось. Попробуй ещё раз.');
+    } catch (e) {
+      error.textContent = 'Нет связи. Проверь интернет и попробуй ещё раз.';
+    }
+    button.disabled = false;
+  });
 </script>
 </body>
 </html>
